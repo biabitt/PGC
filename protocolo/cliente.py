@@ -16,13 +16,13 @@ from criptografia.hashes import (
     inverso_modular,
 )
 
-from criptografia.serializacao import (
-    codificar_dados_cliente,
-)
-
 from criptografia.utilitarios import (
     gerar_mascara,
     xor_bytes,
+)
+
+from protocolo.codificacao import (
+    codificar_dados_cliente,
 )
 
 from protocolo.mensagens import (
