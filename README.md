@@ -60,18 +60,21 @@ Diffie-Hellman sobre o grupo alvo do emparelhamento (`GT`).
 ## Estrutura do repositório
 
 ```
-criptografia/   Primitivas criptográficas: curva/emparelhamento, hashes
-                (H1-H4), serialização de pontos e utilitários (XOR, máscara).
-protocolo/      Entidades do protocolo: SGC, Cliente, Servidor e as
-                mensagens trocadas entre elas.
+criptografia/   Primitivas criptográficas reutilizáveis: curva/emparelhamento,
+                hashes (H1-H4), serialização de pontos/elementos de GT e
+                utilitários (XOR, máscara).
+protocolo/      Entidades e mensagens do protocolo: SGC, Cliente, Servidor,
+                as mensagens trocadas entre elas e a codificação do bloco
+                protegido (IDi, si, w) usado em C1.
 ataque/         Implementação do atacante que executa a personificação do
                 provedor de serviço.
 testes/         Testes automatizados (pytest) cobrindo criptografia,
                 registro, autenticação legítima e o ataque.
-_old/           Protótipo inicial do protocolo, mantido como referência
-                histórica do desenvolvimento.
-main.py         Script de demonstração com os dois cenários: autenticação
-                normal e ataque de personificação.
+cenarios.py     Orquestração dos dois cenários (autenticação normal e
+                ataque), sem nenhuma lógica de apresentação — retorna
+                resultados estruturados.
+main.py         Script de demonstração: chama cenarios.py e imprime os
+                resultados no console.
 ```
 
 ## Ataque de personificação do provedor de serviço
@@ -143,7 +146,8 @@ honesta do cliente.
 Pré-requisitos: Python 3.10+.
 
 ```bash
-pip install -r requirements.txt
+# Instala o projeto em modo editável, com as dependências de desenvolvimento
+pip install -e ".[dev]"
 
 # Executa os dois cenários de demonstração (autenticação normal e ataque)
 python main.py
