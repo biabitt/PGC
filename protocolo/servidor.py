@@ -14,13 +14,13 @@ from criptografia.hashes import (
     hash_confirmacao,
 )
 
-from criptografia.serializacao import (
-    decodificar_dados_cliente,
-)
-
 from criptografia.utilitarios import (
     gerar_mascara,
     xor_bytes,
+)
+
+from protocolo.codificacao import (
+    decodificar_dados_cliente,
 )
 
 from protocolo.mensagens import (
