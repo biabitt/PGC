@@ -16,8 +16,25 @@ dev = [
     "pytest>=9.1.1",
 ]
 
+puf = [
+    "pypuf==2.2.0",
+    "numpy>=1.18",
+]
+
 [tool.setuptools]
-py-modules = ["main", "cenarios"]
+py-modules = [
+    "main",
+    "main_protocolo",
+    "main_benchmark",
+    "main_resultados",
+    "cenarios",
+]
 
 [tool.setuptools.packages.find]
-include = ["protocolo*", "criptografia*", "ataque*"]
+include = [
+    "protocolo*",
+    "criptografia*",
+    "ataque*",
+    "puf*",
+    "benchmark*",
+]
