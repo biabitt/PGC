@@ -18,6 +18,11 @@ class ResultadoPar:
     sessao_orig_ns: int
     sessao_puf_ns: int
     delta_sessao_ns: int
+    # tempo das chamadas de cada lado dentro de auth (0 em CSVs gerados antes dessa separação)
+    auth_cliente_orig_ns: int = 0
+    auth_servidor_orig_ns: int = 0
+    auth_cliente_puf_ns: int = 0
+    auth_servidor_puf_ns: int = 0
 
 
 @dataclass(frozen=True)

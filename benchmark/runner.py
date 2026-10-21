@@ -33,6 +33,26 @@ def _cronometrar(funcao, *args):
     return _agora_ns() - inicio
 
 
+class _Cronometro:
+    """Acumula, por lado, o tempo das chamadas de uma troca de autenticação."""
+
+    def __init__(self) -> None:
+        self.cliente_ns = 0
+        self.servidor_ns = 0
+
+    def cliente(self, funcao, *args):
+        inicio = _agora_ns()
+        valor = funcao(*args)
+        self.cliente_ns += _agora_ns() - inicio
+        return valor
+
+    def servidor(self, funcao, *args):
+        inicio = _agora_ns()
+        valor = funcao(*args)
+        self.servidor_ns += _agora_ns() - inicio
+        return valor
+
+
 class BenchmarkRunner:
     def __init__(self, config: PUFConfig | None = None) -> None:
         self._config = config or PUFConfig()
@@ -40,17 +60,20 @@ class BenchmarkRunner:
     # --- núcleo pareado -----------------------------------------------------------
 
     def _medir_versao(self, versao, identidade, cenario, criar, autenticar, apos_registro):
-        """Roda o protocolo inteiro para uma versão (original ou puf) e devolve os três tempos."""
+        """Roda o protocolo inteiro para uma versão (original ou puf) e devolve os tempos:
+        registro, preparo, auth (ponta a ponta), auth do cliente, auth do servidor."""
         cliente, registro = criar(versao, identidade, cenario)
         registro_ns = _cronometrar(cliente.receber_registro, registro)
         if apos_registro:
             apos_registro(cliente, cenario, registro)          # lado servidor, fora do tempo
         preparar = getattr(cliente, "preparar_autenticacao", None)
         preparo_ns = _cronometrar(preparar) if preparar else 0
-        auth_ns = _cronometrar(autenticar, cliente, cenario, versao)
+        inicio = _agora_ns()                                   # ponta a ponta, medição independente
+        auth_cliente_ns, auth_servidor_ns = autenticar(cliente, cenario, versao)
+        auth_ns = _agora_ns() - inicio
         if hasattr(cliente, "finalizar_sessao"):
             cliente.finalizar_sessao()
-        return registro_ns, preparo_ns, auth_ns
+        return registro_ns, preparo_ns, auth_ns, auth_cliente_ns, auth_servidor_ns
 
     def _medir(self, nome, rodadas, *, preparar, criar, autenticar, apos_registro=None):
         """Laço pareado: em cada rodada mede as duas versões, em ordem alternada."""
@@ -61,14 +84,15 @@ class BenchmarkRunner:
             tempos = {versao: self._medir_versao(versao, f"cliente{rodada}", cenario,
                                                  criar, autenticar, apos_registro)
                       for versao in ordem}
-            registro_orig, preparo_orig, auth_orig = tempos["original"]
-            registro_puf, preparo_puf, auth_puf = tempos["puf"]
+            registro_orig, preparo_orig, auth_orig, cli_orig, srv_orig = tempos["original"]
+            registro_puf, preparo_puf, auth_puf, cli_puf, srv_puf = tempos["puf"]
             sessao_orig = preparo_orig + auth_orig
             sessao_puf = preparo_puf + auth_puf
             resultados.append(ResultadoPar(
                 nome, rodada,
                 registro_orig, registro_puf, preparo_orig, preparo_puf, auth_orig, auth_puf,
                 sessao_orig, sessao_puf, sessao_puf - sessao_orig,
+                cli_orig, srv_orig, cli_puf, srv_puf,
             ))
         return resultados
 
@@ -96,10 +120,14 @@ class BenchmarkRunner:
 
         def autenticar(cliente, cenario, versao):
             servidor = cenario["servidor"]
-            desafio = servidor.gerar_desafio(cliente.criar_solicitacao(servidor.identidade))
-            resultado = servidor.autenticar_cliente(cliente.responder_desafio(desafio))
-            sucesso = resultado.autenticado and cliente.autenticar_servidor(resultado.confirmacao)
+            t = _Cronometro()
+            solicitacao = t.cliente(cliente.criar_solicitacao, servidor.identidade)
+            desafio = t.servidor(servidor.gerar_desafio, solicitacao)
+            resposta = t.cliente(cliente.responder_desafio, desafio)
+            resultado = t.servidor(servidor.autenticar_cliente, resposta)
+            sucesso = resultado.autenticado and t.cliente(cliente.autenticar_servidor, resultado.confirmacao)
             self._checar(sucesso and cliente.chave_sessao == servidor.chave_sessao, nome, versao)
+            return t.cliente_ns, t.servidor_ns
 
         return self._medir(nome, rodadas, preparar=preparar, criar=criar, autenticar=autenticar)
 
@@ -133,9 +161,12 @@ class BenchmarkRunner:
 
         def autenticar(cliente, cenario, versao):
             servidor = cenario["servidor"]
-            resultado = servidor.autenticar_usuario(cliente.criar_mensagem_autenticacao(servidor.identidade))
-            sucesso = resultado.autenticado and cliente.verificar_resposta(resultado.resposta)
+            t = _Cronometro()
+            mensagem = t.cliente(cliente.criar_mensagem_autenticacao, servidor.identidade)
+            resultado = t.servidor(servidor.autenticar_usuario, mensagem)
+            sucesso = resultado.autenticado and t.cliente(cliente.verificar_resposta, resultado.resposta)
             self._checar(sucesso and cliente.chave_sessao == servidor.chave_sessao, "Jia", versao)
+            return t.cliente_ns, t.servidor_ns
 
         return self._medir("jia", rodadas, preparar=preparar, criar=criar, autenticar=autenticar)
 
@@ -167,11 +198,14 @@ class BenchmarkRunner:
 
         def autenticar(cliente, cenario, versao):
             servidor = cenario["servidor"]
-            resultado = servidor.autenticar_usuario(cliente.criar_mensagem_autenticacao())
-            confirmacao = cliente.verificar_resposta(resultado.resposta)
+            t = _Cronometro()
+            mensagem = t.cliente(cliente.criar_mensagem_autenticacao)
+            resultado = t.servidor(servidor.autenticar_usuario, mensagem)
+            confirmacao = t.cliente(cliente.verificar_resposta, resultado.resposta)
             sucesso = (resultado.autenticado and confirmacao is not None
-                       and servidor.verificar_confirmacao(confirmacao))
+                       and t.servidor(servidor.verificar_confirmacao, confirmacao))
             self._checar(sucesso and cliente.chave_sessao == servidor.chave_sessao, "Kaur", versao)
+            return t.cliente_ns, t.servidor_ns
 
         return self._medir("kaur", rodadas, preparar=preparar, criar=criar,
                            autenticar=autenticar, apos_registro=apos_registro)
